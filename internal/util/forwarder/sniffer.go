@@ -32,6 +32,7 @@ import (
 	xio "github.com/go-gost/x/internal/io"
 	xnet "github.com/go-gost/x/internal/net"
 	xhttp "github.com/go-gost/x/internal/net/http"
+	"github.com/go-gost/x/internal/util/ja3"
 	"github.com/go-gost/x/internal/util/sniffing"
 	tls_util "github.com/go-gost/x/internal/util/tls"
 	ws_util "github.com/go-gost/x/internal/util/ws"
@@ -125,6 +126,12 @@ type Sniffer struct {
 	NegotiatedProtocol string
 	CertPool           tls_util.CertPool
 	MitmBypass         bypass.Bypass
+
+	// JA3/JA4 fingerprint spoofing
+	JA3                 string
+	JA4                 string
+	ClientHelloSpecFile string
+	BrowserProfile      string
 
 	ReadTimeout time.Duration
 }
@@ -987,12 +994,46 @@ func (h *Sniffer) terminateTLS(ctx context.Context, conn, cc net.Conn, clientHel
 	if cfg.ServerName == "" {
 		cfg.InsecureSkipVerify = true
 	}
-	clientConn := tls.Client(cc, cfg)
-	if err := clientConn.HandshakeContext(ctx); err != nil {
-		return err
+
+	var clientConn net.Conn
+	var err error
+
+	// Use custom JA3/JA4 fingerprint if configured
+	if h.JA3 != "" || h.ClientHelloSpecFile != "" || h.BrowserProfile != "" {
+		log.Debugf("using custom TLS fingerprint for upstream connection to %s", clientHello.ServerName)
+
+		ja3Config := &ja3.TLSDialerConfig{
+			JA3:                 h.JA3,
+			ClientHelloSpecFile: h.ClientHelloSpecFile,
+			BrowserProfile:      h.BrowserProfile,
+			ServerName:          clientHello.ServerName,
+			ALPNProtocols:       nextProtos,
+			TLSConfig:           cfg,
+		}
+
+		// cc is already the TCP connection to upstream
+		// We need to upgrade it to TLS with custom fingerprint
+		clientConn, err = ja3.UpgradeConnWithFingerprint(ctx, cc, ja3Config)
+		if err != nil {
+			return fmt.Errorf("failed to establish TLS with custom fingerprint: %w", err)
+		}
+	} else {
+		// Standard TLS handshake
+		clientConn = tls.Client(cc, cfg)
+		if err = clientConn.(*tls.Conn).HandshakeContext(ctx); err != nil {
+			return err
+		}
 	}
 
-	cs := clientConn.ConnectionState()
+	// Extract connection state
+	var cs tls.ConnectionState
+	if tlsConn, ok := clientConn.(*tls.Conn); ok {
+		cs = tlsConn.ConnectionState()
+	} else {
+		// For uTLS connection, we need to get the state differently
+		cs = clientConn.(interface{ ConnectionState() tls.ConnectionState }).ConnectionState()
+	}
+
 	ro.TLS.CipherSuite = tls_util.CipherSuite(cs.CipherSuite).String()
 	ro.TLS.Proto = cs.NegotiatedProtocol
 	ro.TLS.Version = tls_util.Version(cs.Version).String()
@@ -1057,14 +1098,14 @@ func (h *Sniffer) terminateTLS(ctx context.Context, conn, cc net.Conn, clientHel
 			}, nil
 		},
 	})
-	err := serverConn.HandshakeContext(ctx)
+	handshakeErr := serverConn.HandshakeContext(ctx)
 	if record, _ := dissector.ReadRecord(wb); record != nil {
 		wb.Reset()
 		record.WriteTo(wb)
 		ro.TLS.ServerHello = hex.EncodeToString(wb.Bytes())
 	}
-	if err != nil {
-		return err
+	if handshakeErr != nil {
+		return handshakeErr
 	}
 
 	opts := []HandleOption{
