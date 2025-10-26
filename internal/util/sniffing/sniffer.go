@@ -734,30 +734,45 @@ func (h *Sniffer) terminateTLS(ctx context.Context, network string, conn, cc net
 		}
 	}
 
-	// Extract connection state
-	var cs tls.ConnectionState
+	// Extract connection state (best-effort).
+	// Note: when using uTLS (custom JA3/BrowserProfile), the connection type is *utls.UConn,
+	// which does not implement tls.ConnectionState and will panic on assertion.
+	// We therefore only read tls.ConnectionState when the conn is *tls.Conn, and
+	// otherwise proceed with sensible fallbacks.
+	var (
+		host               string
+		negotiatedProtocol string
+	)
 	if tlsConn, ok := clientConn.(*tls.Conn); ok {
-		cs = tlsConn.ConnectionState()
+		cs := tlsConn.ConnectionState()
+		ro.TLS.CipherSuite = tls_util.CipherSuite(cs.CipherSuite).String()
+		ro.TLS.Proto = cs.NegotiatedProtocol
+		ro.TLS.Version = tls_util.Version(cs.Version).String()
+
+		host = cfg.ServerName
+		if host == "" {
+			if len(cs.PeerCertificates) > 0 {
+				if cn := cs.PeerCertificates[0].Subject.CommonName; cn != "" {
+					host = cn
+				}
+			}
+			if host == "" {
+				host = ro.Host
+			}
+		}
+		negotiatedProtocol = cs.NegotiatedProtocol
 	} else {
-		// For uTLS connection, we need to get the state differently
-		cs = clientConn.(interface{ ConnectionState() tls.ConnectionState }).ConnectionState()
-	}
-
-	ro.TLS.CipherSuite = tls_util.CipherSuite(cs.CipherSuite).String()
-	ro.TLS.Proto = cs.NegotiatedProtocol
-	ro.TLS.Version = tls_util.Version(cs.Version).String()
-
-	host := cfg.ServerName
-	if host == "" {
-		if host = cs.PeerCertificates[0].Subject.CommonName; host == "" {
+		// uTLS path: we cannot access tls.ConnectionState; use fallbacks.
+		host = cfg.ServerName
+		if host == "" {
 			host = ro.Host
 		}
+		// negotiatedProtocol is unknown here; will be overridden by configured h.NegotiatedProtocol below if set.
 	}
 	if h, _, _ := net.SplitHostPort(host); h != "" {
 		host = h
 	}
 
-	negotiatedProtocol := cs.NegotiatedProtocol
 	if h.NegotiatedProtocol != "" {
 		negotiatedProtocol = h.NegotiatedProtocol
 	}
