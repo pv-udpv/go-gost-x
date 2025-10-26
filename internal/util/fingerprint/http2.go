@@ -295,6 +295,25 @@ var HTTP2ProfilesDB = map[string]HTTP2Profile{
 	},
 }
 
+// http2ProfileAliases maps commonly used profile names to canonical HTTP/2 profile keys.
+// This keeps configuration consistent with JA3 profile names used elsewhere (e.g., chrome_modern, firefox_latest).
+var http2ProfileAliases = map[string]string{
+	// JA3-style names -> HTTP/2 canonical names
+	"chrome_modern":  "chrome_120",
+	"firefox_latest": "firefox_120",
+	"edge_latest":    "edge_120",
+
+	// Short names / common shorthands
+	"curl":   "curl_latest",
+	"okhttp": "okhttp_android",
+
+	// Backwards-compatible alternates
+	"safari":         "safari_17",
+	"safari_ios":     "safari_ios_17",
+	"android_chrome": "android_chrome",
+	"go":             "go_http",
+}
+
 // GenerateHTTP2Fingerprint creates an Akamai-format HTTP/2 fingerprint string
 func GenerateHTTP2Fingerprint(fp *HTTP2Fingerprint) string {
 	// Part 1: SETTINGS (sorted by key)
@@ -381,13 +400,21 @@ func ParseHTTP2Fingerprint(fingerprint string) (*HTTP2Fingerprint, error) {
 
 // GetHTTP2Profile returns an HTTP/2 profile by name
 func GetHTTP2Profile(name string) (HTTP2Profile, bool) {
-	profile, ok := HTTP2ProfilesDB[name]
-	return profile, ok
+	if profile, ok := HTTP2ProfilesDB[name]; ok {
+		return profile, true
+	}
+	// Try alias resolution
+	if alias, ok := http2ProfileAliases[strings.ToLower(name)]; ok {
+		if profile, ok := HTTP2ProfilesDB[alias]; ok {
+			return profile, true
+		}
+	}
+	return HTTP2Profile{}, false
 }
 
 // GetHTTP2Fingerprint returns the HTTP/2 fingerprint string for a profile
 func GetHTTP2Fingerprint(profileName string) string {
-	if profile, ok := HTTP2ProfilesDB[profileName]; ok {
+	if profile, ok := GetHTTP2Profile(profileName); ok {
 		return profile.Fingerprint
 	}
 	return ""
