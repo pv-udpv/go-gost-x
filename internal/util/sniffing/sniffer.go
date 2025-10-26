@@ -28,6 +28,7 @@ import (
 	xio "github.com/go-gost/x/internal/io"
 	xnet "github.com/go-gost/x/internal/net"
 	xhttp "github.com/go-gost/x/internal/net/http"
+	"github.com/go-gost/x/internal/util/fingerprint"
 	"github.com/go-gost/x/internal/util/ja3"
 	tls_util "github.com/go-gost/x/internal/util/tls"
 	ws_util "github.com/go-gost/x/internal/util/ws"
@@ -267,6 +268,11 @@ func (h *Sniffer) serveH2(ctx context.Context, network string, conn net.Conn, ho
 			cc = tls.Client(cc, cfg)
 			return cc, nil
 		},
+	}
+
+	// Apply HTTP/2 fingerprinting based on BrowserProfile when available
+	if h.BrowserProfile != "" {
+		_ = fingerprint.ConfigureHTTP2Transport(tr, h.BrowserProfile)
 	}
 	defer tr.CloseIdleConnections()
 

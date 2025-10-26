@@ -302,6 +302,10 @@ var http2ProfileAliases = map[string]string{
 	"chrome_modern":  "chrome_120",
 	"firefox_latest": "firefox_120",
 	"edge_latest":    "edge_120",
+	// Short generic names -> latest stable
+	"chrome":  "chrome_120",
+	"firefox": "firefox_120",
+	"edge":    "edge_120",
 
 	// Short names / common shorthands
 	"curl":   "curl_latest",
