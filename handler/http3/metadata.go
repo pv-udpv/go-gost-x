@@ -12,6 +12,10 @@ type metadata struct {
 	probeResistance *probeResistance
 	header          http.Header
 	hash            string
+	ja4             string
+	ja4Hash         string
+	clientHelloFile string
+	browserProfile  string
 }
 
 func (h *http3Handler) parseMetadata(md mdata.Metadata) error {
@@ -34,6 +38,12 @@ func (h *http3Handler) parseMetadata(md mdata.Metadata) error {
 		}
 	}
 	h.md.hash = mdutil.GetString(md, "hash")
+
+	// Parse JA4 fingerprinting configuration
+	h.md.ja4 = mdutil.GetString(md, "ja4")
+	h.md.ja4Hash = mdutil.GetString(md, "ja4Hash")
+	h.md.clientHelloFile = mdutil.GetString(md, "clientHelloSpecFile")
+	h.md.browserProfile = mdutil.GetString(md, "browserProfile")
 
 	return nil
 }

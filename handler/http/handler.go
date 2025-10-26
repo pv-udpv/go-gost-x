@@ -401,6 +401,10 @@ func (h *httpHandler) handleRequest(ctx context.Context, conn net.Conn, req *htt
 			NegotiatedProtocol:  h.md.alpn,
 			CertPool:            h.certPool,
 			MitmBypass:          h.md.mitmBypass,
+			JA3:                 h.md.ja3,
+			JA4:                 h.md.ja4,
+			ClientHelloSpecFile: h.md.clientHelloSpecFile,
+			BrowserProfile:      h.md.browserProfile,
 			ReadTimeout:         h.md.readTimeout,
 		}
 

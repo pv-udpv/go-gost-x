@@ -44,6 +44,12 @@ type metadata struct {
 	alpn        string
 	mitmBypass  bypass.Bypass
 
+	// JA3/JA4 fingerprint spoofing
+	ja3                 string
+	ja4                 string
+	clientHelloSpecFile string
+	browserProfile      string
+
 	limiterRefreshInterval time.Duration
 	limiterCleanupInterval time.Duration
 }
@@ -117,6 +123,11 @@ func (h *httpHandler) parseMetadata(md mdata.Metadata) error {
 	}
 	h.md.alpn = mdutil.GetString(md, "mitm.alpn")
 	h.md.mitmBypass = registry.BypassRegistry().Get(mdutil.GetString(md, "mitm.bypass"))
+
+	h.md.ja3 = mdutil.GetString(md, "mitm.ja3", "ja3")
+	h.md.ja4 = mdutil.GetString(md, "mitm.ja4", "ja4")
+	h.md.clientHelloSpecFile = mdutil.GetString(md, "mitm.clientHelloSpecFile", "clientHelloSpecFile")
+	h.md.browserProfile = mdutil.GetString(md, "mitm.browserProfile", "browserProfile")
 
 	h.md.limiterRefreshInterval = mdutil.GetDuration(md, "limiter.refreshInterval")
 	h.md.limiterCleanupInterval = mdutil.GetDuration(md, "limiter.cleanupInterval")
